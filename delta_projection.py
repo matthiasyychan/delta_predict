@@ -173,7 +173,7 @@ decay_options = [0, 2.5, 5, 7.5, 10, 12.5, 15, 20]
 decay_pct = st.selectbox(
     "Volatility decrement per year (%)",
     decay_options,
-    index=2,
+    index=0,
     format_func=lambda v: f"{v:g}%",
 )
 
