@@ -260,6 +260,8 @@ st.subheader("Projected BTC Price by Delta (Next 10 Years)")
 df_long = df.reset_index().melt(id_vars="index", var_name="Delta", value_name="Price")
 df_long.rename(columns={"index": "Year"}, inplace=True)
 df_long["Multiple"] = df_long["Price"] / float(index_price)
+df_long["YearsOut"] = df_long["Year"].astype(int) - start_year
+df_long["APR"] = (df_long["Multiple"] ** (1 / df_long["YearsOut"])) - 1
 df_long["Volatility"] = df_long["Year"].map(lambda y: year_sigmas.get(int(y), sigma_atm)) * 100.0
 
 base = alt.Chart(df_long).encode(
@@ -281,6 +283,7 @@ points = (
             alt.Tooltip("Delta:N"),
             alt.Tooltip("Price:Q", format=",.0f"),
             alt.Tooltip("Volatility:Q", format=".2f", title="Volatility (%)"),
+            alt.Tooltip("APR:Q", format=".2%", title="APR"),
             alt.Tooltip("Multiple:Q", format=".2f", title="Multiple (x)"),
         ],
     )
@@ -297,6 +300,7 @@ rule = (
             alt.Tooltip("Delta:N"),
             alt.Tooltip("Price:Q", format=",.0f"),
             alt.Tooltip("Volatility:Q", format=".2f", title="Volatility (%)"),
+            alt.Tooltip("APR:Q", format=".2%", title="APR"),
             alt.Tooltip("Multiple:Q", format=".2f", title="Multiple (x)"),
         ],
         opacity=alt.condition(hover, alt.value(0.6), alt.value(0)),
