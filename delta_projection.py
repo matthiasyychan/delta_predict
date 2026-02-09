@@ -169,6 +169,14 @@ expiry_sel = st.selectbox(
     format_func=lambda ts: "Average (all expiries)" if ts == avg_key else expiry_labels[ts],
 )
 
+timeframe_options = [10, 15, 20, 25, 30, 35, 40, 45, 50]
+timeframe_years = st.selectbox(
+    "Timeframe (years)",
+    timeframe_options,
+    index=0,
+    format_func=lambda v: f"{v} years",
+)
+
 decay_options = [0, 2.5, 5, 7.5, 10, 12.5, 15, 20]
 decay_pct = st.selectbox(
     "Volatility decrement per year (%)",
@@ -239,7 +247,7 @@ decay_rate = float(decay_pct) / 100.0
 deltas = [0.5, 0.4, 0.3, 0.2, 0.1, 0.6, 0.7, 0.8, 0.9, 0.999]
 
 start_year = datetime.now(tz=timezone.utc).year
-years = [start_year + i for i in range(1, 11)]
+years = [start_year + i for i in range(1, timeframe_years + 1)]
 data = {}
 year_sigmas = {}
 
@@ -247,7 +255,7 @@ for delta in deltas:
     p = min(0.999999, max(0.000001, float(delta)))
     d1 = inv_norm_cdf(p)
     series = []
-    for i in range(1, 11):
+    for i in range(1, timeframe_years + 1):
         T = float(i)
         sigma_year = max(target_sigma, sigma_atm * ((1 - decay_rate) ** i))
         year_sigmas[start_year + i] = sigma_year
@@ -256,7 +264,7 @@ for delta in deltas:
     data[f"Δ {delta:g}"] = series
 
 df = pd.DataFrame(data, index=years).round(0).astype(int)
-st.subheader("Projected BTC Price by Delta (Next 10 Years)")
+st.subheader(f"Projected BTC Price by Delta (Next {timeframe_years} Years)")
 
 df_long = df.reset_index().melt(id_vars="index", var_name="Delta", value_name="Price")
 df_long.rename(columns={"index": "Year"}, inplace=True)
