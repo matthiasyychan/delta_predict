@@ -1,6 +1,7 @@
 import math
 import time
 from datetime import datetime, timezone
+from io import BytesIO
 
 import altair as alt
 import pandas as pd
@@ -235,7 +236,7 @@ sigma_atm = float(atm_call_iv_pct) / 100.0
 target_vix_pct = 17.28
 target_sigma = target_vix_pct / 100.0
 decay_rate = float(decay_pct) / 100.0
-deltas = [0.5, 0.4, 0.3, 0.2, 0.1, 0.6, 0.7, 0.8, 0.9, 1.0]
+deltas = [0.5, 0.4, 0.3, 0.2, 0.1, 0.6, 0.7, 0.8, 0.9, 0.999]
 
 start_year = datetime.now(tz=timezone.utc).year
 years = [start_year + i for i in range(1, 11)]
@@ -310,3 +311,37 @@ rule = (
 
 chart = (line + points + rule)
 st.altair_chart(chart, use_container_width=True)
+
+# Download chart data as Excel (deltas ordered 0.1 -> 1.0)
+excel_buffer = BytesIO()
+ordered_cols = sorted(
+    df.columns,
+    key=lambda c: float(c.replace("Δ", "").strip()),
+)
+df_excel = df[ordered_cols]
+with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
+    df_excel.to_excel(writer, sheet_name="Delta Projection")
+    workbook = writer.book
+    worksheet = writer.sheets["Delta Projection"]
+    num_format = workbook.add_format({"num_format": "#,##0"})
+    worksheet.set_column(1, 1 + len(df_excel.columns), 14, num_format)
+    # Export tooltip data
+    tooltip_cols = ["Year", "Delta", "Price", "Volatility", "APR", "Multiple"]
+    tooltip_df = df_long[tooltip_cols].copy()
+    tooltip_df["DeltaNum"] = tooltip_df["Delta"].str.replace("Δ", "").str.strip().astype(float)
+    tooltip_df = tooltip_df.sort_values(["DeltaNum", "Year"]).drop(columns=["DeltaNum"])
+    tooltip_df.to_excel(writer, sheet_name="Tooltip Data", index=False)
+    tooltip_ws = writer.sheets["Tooltip Data"]
+    tooltip_ws.set_column(0, 0, 8)
+    tooltip_ws.set_column(1, 1, 8)
+    tooltip_ws.set_column(2, 2, 14, num_format)
+    tooltip_ws.set_column(3, 3, 14, workbook.add_format({"num_format": "0.00"}))
+    tooltip_ws.set_column(4, 4, 14, workbook.add_format({"num_format": "0.00%"}))
+    tooltip_ws.set_column(5, 5, 14, workbook.add_format({"num_format": "0.00"}))
+excel_buffer.seek(0)
+st.download_button(
+    label="Download chart data (Excel)",
+    data=excel_buffer,
+    file_name="delta_projection.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+)
