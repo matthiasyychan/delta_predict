@@ -342,6 +342,6 @@ excel_buffer.seek(0)
 st.download_button(
     label="Download chart data (Excel)",
     data=excel_buffer,
-    file_name="delta_projection.xlsx",
+    file_name=f"delta_projection_{datetime.now(tz=timezone.utc).strftime('%Y%m%d')}.xlsx",
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 )
