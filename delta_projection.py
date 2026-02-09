@@ -168,6 +168,14 @@ expiry_sel = st.selectbox(
     format_func=lambda ts: "Average (all expiries)" if ts == avg_key else expiry_labels[ts],
 )
 
+decay_options = [0, 2.5, 5, 7.5, 10, 12.5, 15, 20]
+decay_pct = st.selectbox(
+    "Volatility decrement per year (%)",
+    decay_options,
+    index=2,
+    format_func=lambda v: f"{v:g}%",
+)
+
 atm_call_iv_pct = None
 F_live = float(index_price)
 using_average = expiry_sel == avg_key
@@ -224,11 +232,15 @@ if atm_call_iv_pct is None:
     st.stop()
 
 sigma_atm = float(atm_call_iv_pct) / 100.0
+target_vix_pct = 17.28
+target_sigma = target_vix_pct / 100.0
+decay_rate = float(decay_pct) / 100.0
 deltas = [0.5, 0.4, 0.3, 0.2, 0.1, 0.6, 0.7, 0.8, 0.9, 1.0]
 
 start_year = datetime.now(tz=timezone.utc).year
 years = [start_year + i for i in range(1, 11)]
 data = {}
+year_sigmas = {}
 
 for delta in deltas:
     p = min(0.999999, max(0.000001, float(delta)))
@@ -236,7 +248,9 @@ for delta in deltas:
     series = []
     for i in range(1, 11):
         T = float(i)
-        strike = F_live * math.exp(-d1 * sigma_atm * math.sqrt(T) + 0.5 * sigma_atm * sigma_atm * T)
+        sigma_year = max(target_sigma, sigma_atm * ((1 - decay_rate) ** i))
+        year_sigmas[start_year + i] = sigma_year
+        strike = F_live * math.exp(-d1 * sigma_year * math.sqrt(T) + 0.5 * sigma_year * sigma_year * T)
         series.append(strike)
     data[f"Δ {delta:g}"] = series
 
@@ -246,6 +260,7 @@ st.subheader("Projected BTC Price by Delta (Next 10 Years)")
 df_long = df.reset_index().melt(id_vars="index", var_name="Delta", value_name="Price")
 df_long.rename(columns={"index": "Year"}, inplace=True)
 df_long["Multiple"] = df_long["Price"] / float(index_price)
+df_long["Volatility"] = df_long["Year"].map(lambda y: year_sigmas.get(int(y), sigma_atm)) * 100.0
 
 base = alt.Chart(df_long).encode(
     x=alt.X("Year:O", title="Year"),
@@ -265,6 +280,7 @@ points = (
             alt.Tooltip("Year:O"),
             alt.Tooltip("Delta:N"),
             alt.Tooltip("Price:Q", format=",.0f"),
+            alt.Tooltip("Volatility:Q", format=".2f", title="Volatility (%)"),
             alt.Tooltip("Multiple:Q", format=".2f", title="Multiple (x)"),
         ],
     )
@@ -280,6 +296,7 @@ rule = (
             alt.Tooltip("Year:O"),
             alt.Tooltip("Delta:N"),
             alt.Tooltip("Price:Q", format=",.0f"),
+            alt.Tooltip("Volatility:Q", format=".2f", title="Volatility (%)"),
             alt.Tooltip("Multiple:Q", format=".2f", title="Multiple (x)"),
         ],
         opacity=alt.condition(hover, alt.value(0.6), alt.value(0)),
