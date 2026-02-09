@@ -110,55 +110,117 @@ def inv_norm_cdf(p: float) -> float:
     )
 
 
+def get_atm_call_iv_for_expiry(expiry_ts, instruments, currency, index_price):
+    filtered = [x for x in instruments if x["expiration_timestamp"] == expiry_ts]
+    strikes = sorted({int(x["strike"]) for x in filtered})
+    sample_calls = [x for x in filtered if x["option_type"] == "call"]
+    if not sample_calls:
+        return None, None
+
+    sample_ticker = get_ticker(sample_calls[0]["instrument_name"])
+    F_live = float(sample_ticker.get("underlying_price") or 0.0)
+    if F_live <= 0:
+        F_live = float(index_price)
+
+    if not strikes:
+        return None, F_live
+
+    atm_strike = min(strikes, key=lambda k: abs(k - int(round(F_live))))
+    atm_call_candidates = [
+        x for x in filtered if x["option_type"] == "call" and int(x["strike"]) == int(atm_strike)
+    ]
+    if not atm_call_candidates:
+        return None, F_live
+
+    atm_call_ticker = get_ticker(atm_call_candidates[0]["instrument_name"])
+    return atm_call_ticker.get("mark_iv", None), F_live
+
+
 st.set_page_config(page_title="BTC Delta Projection", layout="wide")
 st.title("BTC Delta Projection (ATM Mark IV)")
 
 currency = st.selectbox("Currency", ["BTC", "ETH"], index=0)
 instruments = load_option_instruments(currency)
+index_price = get_index_price(currency)
 
 expiries = sorted({x["expiration_timestamp"] for x in instruments})
+
+# Only keep the last expiry in the current month
+now = datetime.now(tz=timezone.utc)
+current_month_expiries = [
+    ts
+    for ts in expiries
+    if datetime.fromtimestamp(ts / 1000, tz=timezone.utc).year == now.year
+    and datetime.fromtimestamp(ts / 1000, tz=timezone.utc).month == now.month
+]
+if current_month_expiries:
+    last_current_month = max(current_month_expiries)
+    expiries = [ts for ts in expiries if ts not in current_month_expiries or ts == last_current_month]
 expiry_labels = {
     ts: datetime.fromtimestamp(ts / 1000, tz=timezone.utc).strftime("%d %b %Y")
     for ts in expiries
 }
-expiry_ts = st.selectbox("Expiry", expiries, format_func=lambda ts: expiry_labels[ts])
-
-filtered_by_expiry = [x for x in instruments if x["expiration_timestamp"] == expiry_ts]
-strikes = sorted({int(x["strike"]) for x in filtered_by_expiry})
-
-sample_calls = [x for x in filtered_by_expiry if x["option_type"] == "call"]
-if not sample_calls:
-    st.error("No call options found for the selected expiry.")
-    st.stop()
-
-sample_ticker = get_ticker(sample_calls[0]["instrument_name"])
-F_live = float(sample_ticker.get("underlying_price") or 0.0)
-if F_live <= 0:
-    F_live = float(get_index_price(currency))
-
-atm_strike = min(strikes, key=lambda k: abs(k - int(round(F_live)))) if strikes else None
+avg_key = "__AVG__"
+expiry_options = [avg_key] + expiries
+expiry_sel = st.selectbox(
+    "Expiry",
+    expiry_options,
+    format_func=lambda ts: "Average (all expiries)" if ts == avg_key else expiry_labels[ts],
+)
 
 atm_call_iv_pct = None
-if atm_strike is not None:
-    atm_call_candidates = [
-        x for x in filtered_by_expiry if x["option_type"] == "call" and int(x["strike"]) == int(atm_strike)
-    ]
-    if atm_call_candidates:
-        atm_call_ticker = get_ticker(atm_call_candidates[0]["instrument_name"])
-        atm_call_iv_pct = atm_call_ticker.get("mark_iv", None)
+F_live = float(index_price)
+using_average = expiry_sel == avg_key
 
-index_price = get_index_price(currency)
+if using_average:
+    iv_values = []
+    fwd_values = []
+    for ts in expiries:
+        iv, fwd = get_atm_call_iv_for_expiry(ts, instruments, currency, index_price)
+        if iv is not None:
+            iv_values.append(float(iv))
+        if fwd is not None:
+            fwd_values.append(float(fwd))
+
+    if iv_values:
+        atm_call_iv_pct = sum(iv_values) / len(iv_values)
+    if fwd_values:
+        F_live = sum(fwd_values) / len(fwd_values)
+else:
+    expiry_ts = expiry_sel
+    filtered_by_expiry = [x for x in instruments if x["expiration_timestamp"] == expiry_ts]
+    strikes = sorted({int(x["strike"]) for x in filtered_by_expiry})
+
+    sample_calls = [x for x in filtered_by_expiry if x["option_type"] == "call"]
+    if not sample_calls:
+        st.error("No call options found for the selected expiry.")
+        st.stop()
+
+    sample_ticker = get_ticker(sample_calls[0]["instrument_name"])
+    F_live = float(sample_ticker.get("underlying_price") or 0.0)
+    if F_live <= 0:
+        F_live = float(index_price)
+
+    atm_strike = min(strikes, key=lambda k: abs(k - int(round(F_live)))) if strikes else None
+    if atm_strike is not None:
+        atm_call_candidates = [
+            x for x in filtered_by_expiry if x["option_type"] == "call" and int(x["strike"]) == int(atm_strike)
+        ]
+        if atm_call_candidates:
+            atm_call_ticker = get_ticker(atm_call_candidates[0]["instrument_name"])
+            atm_call_iv_pct = atm_call_ticker.get("mark_iv", None)
 st.caption("Live data")
 m1, m2, m3 = st.columns(3)
 m1.metric(f"{currency} Index ({currency.lower()}_usd)", f"{index_price:,.2f}")
 m2.metric("Underlying future", f"{F_live:,.2f}")
 if atm_call_iv_pct is not None:
-    m3.metric("ATM Call Mark IV (%)", f"{float(atm_call_iv_pct):.2f}")
+    iv_label = "Avg ATM Call Mark IV (%)" if using_average else "ATM Call Mark IV (%)"
+    m3.metric(iv_label, f"{float(atm_call_iv_pct):.2f}")
 
 st.divider()
 
 if atm_call_iv_pct is None:
-    st.warning("ATM call Mark IV unavailable for this expiry; select another expiry.")
+    st.warning("ATM call Mark IV unavailable for this selection; choose a different expiry.")
     st.stop()
 
 sigma_atm = float(atm_call_iv_pct) / 100.0
