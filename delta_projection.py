@@ -245,6 +245,7 @@ st.subheader("Projected BTC Price by Delta (Next 10 Years)")
 
 df_long = df.reset_index().melt(id_vars="index", var_name="Delta", value_name="Price")
 df_long.rename(columns={"index": "Year"}, inplace=True)
+df_long["Multiple"] = df_long["Price"] / float(index_price)
 
 base = alt.Chart(df_long).encode(
     x=alt.X("Year:O", title="Year"),
@@ -264,6 +265,7 @@ points = (
             alt.Tooltip("Year:O"),
             alt.Tooltip("Delta:N"),
             alt.Tooltip("Price:Q", format=",.0f"),
+            alt.Tooltip("Multiple:Q", format=".2f", title="Multiple (x)"),
         ],
     )
     .add_params(hover)
@@ -278,6 +280,7 @@ rule = (
             alt.Tooltip("Year:O"),
             alt.Tooltip("Delta:N"),
             alt.Tooltip("Price:Q", format=",.0f"),
+            alt.Tooltip("Multiple:Q", format=".2f", title="Multiple (x)"),
         ],
         opacity=alt.condition(hover, alt.value(0.6), alt.value(0)),
     )
