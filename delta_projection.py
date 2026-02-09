@@ -137,8 +137,8 @@ def get_atm_call_iv_for_expiry(expiry_ts, instruments, currency, index_price):
     return atm_call_ticker.get("mark_iv", None), F_live
 
 
-st.set_page_config(page_title="BTC Delta Projection", layout="wide")
-st.title("BTC Delta Projection (ATM Mark IV)")
+st.set_page_config(page_title="Crypto Delta Projection", layout="wide")
+st.title("Crypto Delta Projection (ATM Mark IV)")
 
 currency = st.selectbox("Currency", ["BTC", "ETH"], index=0)
 instruments = load_option_instruments(currency)
