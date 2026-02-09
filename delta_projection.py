@@ -264,7 +264,7 @@ for delta in deltas:
     data[f"Δ {delta:g}"] = series
 
 df = pd.DataFrame(data, index=years).round(0).astype(int)
-st.subheader(f"Projected BTC Price by Delta (Next {timeframe_years} Years)")
+st.subheader(f"Projected {currency} Price by Delta (Next {timeframe_years} Years)")
 
 df_long = df.reset_index().melt(id_vars="index", var_name="Delta", value_name="Price")
 df_long.rename(columns={"index": "Year"}, inplace=True)
