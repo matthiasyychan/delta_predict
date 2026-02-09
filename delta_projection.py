@@ -196,7 +196,14 @@ line = base.mark_line()
 
 points = (
     base.mark_point(size=80)
-    .encode(opacity=alt.condition(hover, alt.value(1), alt.value(0)))
+    .encode(
+        opacity=alt.condition(hover, alt.value(1), alt.value(0)),
+        tooltip=[
+            alt.Tooltip("Year:O"),
+            alt.Tooltip("Delta:N"),
+            alt.Tooltip("Price:Q", format=",.0f"),
+        ],
+    )
     .add_params(hover)
 )
 
